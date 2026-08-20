@@ -1,0 +1,20 @@
+EDA SUMMARY — Phishing Email Detection
+======================================
+
+Dataset
+- Total emails : 30,651 (train 26,946 / test 3,705)
+- Phishing     : 13,809 (45.1%)
+- Safe         : 16,842 (54.9%)
+- Duplicates   : 0
+- Missing      : 0
+
+Key findings
+- Average word count: phishing = 80, safe = 130
+- Average URL count : phishing = 0.95, safe = 0.61
+- Keyword table and plots saved in eda_plots/
+
+Conclusion for next stage (02_data_pipeline.py)
+- Class balance is close enough that accuracy is usable,
+  but we still track F1 as the main metric.
+- URL count and phishing keywords look like useful features.
+- Duplicates and empty rows must be handled in the data pipeline.
