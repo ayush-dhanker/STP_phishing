@@ -1,0 +1,4 @@
+Confusion Matrix:
+[[3360    9]
+ [   0  336]]
+(rows=actual, cols=predicted)

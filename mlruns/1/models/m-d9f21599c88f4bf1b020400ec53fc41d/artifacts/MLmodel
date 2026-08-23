@@ -1,0 +1,29 @@
+artifact_path: /Users/ayush_dhanker/Desktop/course project/STP_phishing/mlruns/1/models/m-d9f21599c88f4bf1b020400ec53fc41d/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.skops
+    predict_fn: predict
+    python_version: 3.12.10
+  sklearn:
+    code: null
+    pickled_model: model.skops
+    serialization_format: skops
+    sklearn_version: 1.8.0
+    skops_trusted_types: null
+is_signature_from_type_hint: false
+mlflow_version: 3.14.0
+model_id: m-d9f21599c88f4bf1b020400ec53fc41d
+model_size_bytes: 33875724
+model_uuid: m-d9f21599c88f4bf1b020400ec53fc41d
+prompts: null
+run_id: 9bad4b85d18f4b12b3d8cbe9c895d471
+signature:
+  inputs: '[{"type": "string", "name": "clean_text", "required": true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "int64", "shape": [-1]}}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-08-16 13:33:12.878753'

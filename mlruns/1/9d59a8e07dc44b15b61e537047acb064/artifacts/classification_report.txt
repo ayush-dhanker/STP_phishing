@@ -1,0 +1,8 @@
+                precision    recall  f1-score   support
+
+    safe_email     0.9994    0.9801    0.9897      3369
+phishing_email     0.8329    0.9940    0.9064       336
+
+      accuracy                         0.9814      3705
+     macro avg     0.9162    0.9871    0.9480      3705
+  weighted avg     0.9843    0.9814    0.9821      3705
