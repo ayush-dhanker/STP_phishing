@@ -1,0 +1,6 @@
+{
+  "train_rows": 26906,
+  "test_rows": 3699,
+  "n_features": 20,
+  "phishing_ratio_train": 0.5007433286255853
+}
