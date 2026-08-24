@@ -1,0 +1,8 @@
+{
+  "checked_at": "2026-08-16T15:37:18+00:00",
+  "n_predictions": 35,
+  "maintenance_needed": true,
+  "breached_indicators": [
+    "Input length drift (Jensen-Shannon)"
+  ]
+}
