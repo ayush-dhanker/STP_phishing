@@ -1,0 +1,218 @@
+{
+  "title": "Phishing Detector — Ops & Drift",
+  "uid": "phishing-detector-overview",
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-6h", "to": "now" },
+  "panels": [
+    {
+      "id": 1,
+      "title": "Prediction rate by class",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          { "matcher": { "id": "byName", "options": "phishing email" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "red" } }] },
+          { "matcher": { "id": "byName", "options": "safe email" }, "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }] }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (prediction) (rate(phishing_predictions_total[5m]))",
+          "legendFormat": "{{prediction}}"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "title": "Request latency (p95, seconds)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "histogram_quantile(0.95, sum(rate(phishing_request_latency_seconds_bucket[5m])) by (le))",
+          "legendFormat": "p95 latency"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "title": "Prediction errors (rate)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum by (error_type) (rate(phishing_prediction_errors_total[5m]))",
+          "legendFormat": "{{error_type}}"
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Input text length distribution",
+      "type": "heatmap",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": "Prometheus",
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "sum(rate(phishing_input_text_length_chars_bucket[5m])) by (le)",
+          "format": "heatmap",
+          "legendFormat": "{{le}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Input drift (Jensen-Shannon distance)",
+      "type": "gauge",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 16 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.2 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "phishing_monitor_input_drift_js"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "title": "Live phishing rate (from monitor cycle)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 8, "y": 16 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "phishing_monitor_live_phishing_rate"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "title": "Maintenance needed?",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 8, "x": 16, "y": 16 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "mappings": [
+            { "type": "value", "options": { "0": { "text": "Healthy", "color": "green" } } },
+            { "type": "value", "options": { "1": { "text": "Maintenance needed", "color": "red" } } }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "phishing_monitor_maintenance_needed"
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "title": "Input drift over time (JS distance, per monitor run)",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "min": 0,
+          "max": 1,
+          "custom": { "thresholdsStyle": { "mode": "line" } },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 0.2 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "phishing_monitor_input_drift_js",
+          "legendFormat": "JS distance"
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "title": "Avg decision margin (latest cycle)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 12, "y": 24 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 0.30 }
+            ]
+          }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "phishing_monitor_avg_decision_margin"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "title": "Predictions analysed (latest cycle)",
+      "type": "stat",
+      "gridPos": { "h": 8, "w": 6, "x": 18, "y": 24 },
+      "datasource": "Prometheus",
+      "fieldConfig": {
+        "defaults": {
+          "thresholds": { "mode": "absolute", "steps": [ { "color": "text", "value": null } ] }
+        }
+      },
+      "targets": [
+        {
+          "datasource": "Prometheus",
+          "expr": "phishing_monitor_n_predictions"
+        }
+      ]
+    }
+  ]
+}

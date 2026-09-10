@@ -1,17 +1,11 @@
-
-FROM python:3.12-slim
-
-ENV PYTHONUNBUFFERED=1
+FROM python:3.10-slim
 
 WORKDIR /app
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-COPY 05_deploy.py .
-COPY best_model.pkl .
-
-RUN mkdir -p monitoring
+COPY . .
 
 EXPOSE 8000
 

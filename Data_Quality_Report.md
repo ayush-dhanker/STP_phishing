@@ -1,4 +1,4 @@
-# Data Quality Report â€” Phishing Email Detection
+# Data Quality Report — Phishing Email Detection
 
 ## Train set
 

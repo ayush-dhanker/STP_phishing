@@ -1,4 +1,5 @@
 # STAGE 5 (Deployment) — DEPLOYMENT TEST
+# Added: a check that /metrics is exposed correctly for Prometheus.
 
 import importlib
 
@@ -10,12 +11,21 @@ deploy = importlib.import_module("05_deploy")
 
 client = TestClient(deploy.app)
 
+
 def test_health_check_returns_ok():
     response = client.get("/")
     assert response.status_code == 200
     body = response.json()
     assert body["status"] == "ok"
     assert body["model_source"].startswith(("mlflow:", "pickle:"))
+
+
+def test_metrics_endpoint_is_prometheus_readable():
+    response = client.get("/metrics")
+    assert response.status_code == 200
+    assert response.headers["content-type"].startswith("text/plain")
+    # basic sanity: our custom metric names should appear once at least one
+    # prediction has been made (see test order / test_predict_* below)
 
 
 # Prediction
@@ -38,7 +48,7 @@ def test_predict_phishing_like_email():
     elif body["confidence_type"] == "decision_margin":
         assert body["decision_score"] is not None
         assert body["decision_score"] >= 0.0
-        assert body["confidence"] is None  
+        assert body["confidence"] is None
 
 
 def test_predict_safe_like_email():
@@ -51,15 +61,22 @@ def test_predict_safe_like_email():
     assert response.json()["label"] in (0, 1)
 
 
+def test_metrics_reflect_predictions():
+    """After the predict tests above have run, /metrics should show at
+    least one counted prediction."""
+    response = client.get("/metrics")
+    assert "phishing_predictions_total" in response.text
+
+
 # Validation
 def test_empty_text_is_rejected():
     response = client.post("/predict", json={"text": "   "})
-    assert response.status_code == 400  
+    assert response.status_code == 400
 
 
 def test_missing_text_field_is_rejected():
     response = client.post("/predict", json={})
-    assert response.status_code == 422  
+    assert response.status_code == 422
 
 
 def test_wrong_type_is_rejected():
@@ -67,9 +84,9 @@ def test_wrong_type_is_rejected():
     assert response.status_code == 422  # text must be a string
 
 
-# loggingevery prediction
+# logging every prediction
 def test_prediction_is_logged(tmp_path, monkeypatch):
-    
+
     log_file = tmp_path / "predictions.log"
     monkeypatch.setattr(deploy, "LOG_FILE", str(log_file))
 
@@ -77,10 +94,10 @@ def test_prediction_is_logged(tmp_path, monkeypatch):
 
     assert log_file.exists()
     lines = log_file.read_text().strip().splitlines()
-    assert len(lines) == 1  
+    assert len(lines) == 1
 
 
 if __name__ == "__main__":
-    
+
     import sys
     sys.exit(pytest.main([__file__, "-v"]))

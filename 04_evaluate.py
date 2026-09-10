@@ -1,5 +1,18 @@
-
 # STAGE 4 (Evaluation) — MODEL SELECTION & CHECKPOINT DECISION
+# Modified to:
+#   1. Read experiment_results.csv in its new (k-fold) shape:
+#        cv_val_f1_mean / test_f1 / test_accuracy / test_roc_auc /
+#        holdout_gap_f1 / cv_gap_f1 / overfitting_risk
+#      instead of the old single f1_weighted / accuracy / roc_auc columns.
+#   2. Select the "best" model by CV VALIDATION score (cv_val_f1_mean),
+#      not by test-set score — the old script picked the model that scored
+#      highest on the test set, then checked that same test-set score
+#      against the pass/fail thresholds below. That's circular: you're
+#      using the test set both to choose the winner and to grade it.
+#      Selecting on CV instead means the test-set threshold check is a
+#      genuinely independent confirmation.
+#   3. Prefer candidates NOT flagged overfitting_risk when picking the winner.
+#   4. Load train/test from Feast instead of feature_store/*.csv.
 
 import os
 import sys
@@ -25,24 +38,29 @@ from sklearn.metrics import (
     classification_report, confusion_matrix, ConfusionMatrixDisplay,
     accuracy_score, f1_score, roc_auc_score)
 
+try:
+    from get_training_data_from_feast import load_split
+except ImportError:
+    sys.exit("ERROR: get_training_data_from_feast.py not found in this directory.")
+
 
 # success criteria (from Stage 1 Business Objectives)
-
 THRESH_ACCURACY = 0.95
 THRESH_AUC      = 0.95
 THRESH_F1       = 0.94
 
-REGISTRY_NAME = "phishing_detector_prod"   
+REGISTRY_NAME = "phishing_detector_prod"
 
-mlflow.set_tracking_uri("sqlite:///mlflow.db")   
+mlflow.set_tracking_uri("sqlite:///mlflow.db")
 
-RESULTS_CSV = "experiment_results.csv"
-TRAIN_CSV   = "feature_store/train_features.csv"
-TEST_CSV    = "feature_store/test_features.csv"
+RESULTS_CSV    = "experiment_results.csv"
+TRAIN_ENTITIES = "feature_repo/data/train_entities.parquet"
+TEST_ENTITIES  = "feature_repo/data/test_entities.parquet"
 
-for path in (RESULTS_CSV, TRAIN_CSV, TEST_CSV):
+for path in (RESULTS_CSV, TRAIN_ENTITIES, TEST_ENTITIES):
     if not os.path.exists(path):
-        sys.exit(f"ERROR: {path} missing. Run 02 then 03 first.")
+        sys.exit(f"ERROR: {path} missing. Run pipeline_feast.py, 'feast apply', "
+                  f"then 03_train_kfold.py first.")
 
 
 VECTORIZERS = {
@@ -64,44 +82,63 @@ MODELS = {
 
 
 def main():
-    df = pd.read_csv(RESULTS_CSV).sort_values("f1_weighted", ascending=False)
+    df = pd.read_csv(RESULTS_CSV)
 
-    # --- TIE-BREAKING RULE
+    # --- prefer candidates not flagged as an overfitting risk ---
+    safe = df[df["overfitting_risk"] == False]  # noqa: E712 (explicit bool compare is clearer here)
+    if len(safe) == 0:
+        print("WARNING: every combo was flagged overfitting_risk=True. "
+              "Selecting from the full set anyway, but treat results with caution.")
+        pool = df
+    else:
+        if len(safe) < len(df):
+            print(f"Excluding {len(df) - len(safe)} overfitting-flagged combo(s) from selection.")
+        pool = safe
+
+    pool = pool.sort_values("cv_val_f1_mean", ascending=False)
+
+    # --- TIE-BREAKING RULE (now on CV score, then test AUC) ---
     PROBA_MODELS = {
         "logistic_regression", "sgd_log_loss",
         "multinomial_nb", "complement_nb", "random_forest",
     }
 
-    top_f1 = df.iloc[0]["f1_weighted"]
-    tied = df[df["f1_weighted"] == top_f1].sort_values("roc_auc", ascending=False)        
+    top_cv_f1 = pool.iloc[0]["cv_val_f1_mean"]
+    tied = pool[pool["cv_val_f1_mean"] == top_cv_f1].sort_values("test_roc_auc", ascending=False)
 
     tied_with_proba = tied[tied["model"].isin(PROBA_MODELS)]
     if len(tied_with_proba) > 0:
-        best = tied_with_proba.iloc[0]             
+        best = tied_with_proba.iloc[0]
     else:
-        best = tied.iloc[0]                        
+        best = tied.iloc[0]
 
     vec_name, model_name = best["vectorizer"], best["model"]
-    print(f"Tie-break: {len(tied)} configs tied at F1={top_f1:.6f}, "
+    print(f"Tie-break: {len(tied)} configs tied at CV F1={top_cv_f1:.6f}, "
           f"{len(tied_with_proba)} support predict_proba.")
 
     print("Best model selected from Stage 3 results:")
     print(f"  {vec_name} + {model_name}")
-    print(f"  accuracy={best['accuracy']:.4f}  f1={best['f1_weighted']:.4f}  "
-          f"auc={best.get('roc_auc', float('nan'))}")
+    print(f"  cv_val_f1={best['cv_val_f1_mean']:.4f} (+/- {best['cv_val_f1_std']:.4f})   "
+          f"test_accuracy={best['test_accuracy']:.4f}  test_f1={best['test_f1']:.4f}  "
+          f"test_auc={best.get('test_roc_auc', float('nan'))}")
+    print(f"  overfitting_risk={best['overfitting_risk']}   "
+          f"cv_gap_f1={best['cv_gap_f1']:.4f}   holdout_gap_f1={best['holdout_gap_f1']:.4f}")
 
-
-    auc_val = best.get("roc_auc")
-    passes = (best["accuracy"] >= THRESH_ACCURACY and
-              best["f1_weighted"] >= THRESH_F1 and
+    # --- checkpoint decision, evaluated on the TRUE holdout test metrics ---
+    # (this is now an independent check, since selection above used CV score,
+    #  not this same test score)
+    auc_val = best.get("test_roc_auc")
+    passes = (best["test_accuracy"] >= THRESH_ACCURACY and
+              best["test_f1"] >= THRESH_F1 and
               (pd.isna(auc_val) or auc_val >= THRESH_AUC))
     decision = "PROCEED TO DEPLOYMENT" if passes else "RETURN TO BUSINESS UNDERSTANDING"
     print(f"\nCheckpoint decision: {decision}")
 
-    train = pd.read_csv(TRAIN_CSV)
-    test  = pd.read_csv(TEST_CSV)
-    Xtr, ytr = train["clean_text"].fillna(""), train["label"]
-    Xte, yte = test["clean_text"].fillna(""),  test["label"]
+    # --- load from Feast (was: pd.read_csv from feature_store/) ---
+    train_df = load_split(TRAIN_ENTITIES)
+    test_df  = load_split(TEST_ENTITIES)
+    Xtr, ytr = train_df["clean_text"].fillna(""), train_df["label"]
+    Xte, yte = test_df["clean_text"].fillna(""),  test_df["label"]
 
     pipeline = Pipeline([
         ("vectorizer", clone(VECTORIZERS[vec_name])),
@@ -118,13 +155,16 @@ def main():
     with mlflow.start_run(run_name="stage4_selected_model"):
         mlflow.log_params({"vectorizer": vec_name, "model": model_name})
         mlflow.log_metrics({
-            "accuracy": float(best["accuracy"]),
-            "f1_weighted": float(best["f1_weighted"]),
+            "cv_val_f1_mean": float(best["cv_val_f1_mean"]),
+            "test_accuracy": float(best["test_accuracy"]),
+            "test_f1": float(best["test_f1"]),
+            "holdout_gap_f1": float(best["holdout_gap_f1"]),
         })
+        mlflow.set_tag("overfitting_risk", str(best["overfitting_risk"]))
         model_info = mlflow.sklearn.log_model(
             pipeline,
             artifact_path="model",
-            registered_model_name=REGISTRY_NAME,  
+            registered_model_name=REGISTRY_NAME,
         )
 
     client = MlflowClient()
@@ -150,7 +190,7 @@ def main():
     plt.close(fig)
     print("Saved -> confusion_matrix_best.png")
 
-    # evaakuation report
+    # evaluation report
     report = classification_report(yte, y_pred, target_names=["safe", "phishing"], digits=4)
     acc = accuracy_score(yte, y_pred)
     f1w = f1_score(yte, y_pred, average="weighted")
@@ -159,6 +199,11 @@ def main():
         "# Evaluation Report — Phishing Email Detection\n",
         "## Selected Model",
         f"- Pipeline: **{vec_name} + {model_name}**",
+        f"- Selected by: 5-fold CV validation F1 = {best['cv_val_f1_mean']:.4f} "
+        f"(+/- {best['cv_val_f1_std']:.4f})",
+        f"- Overfitting risk flag: {best['overfitting_risk']} "
+        f"(CV train-val gap: {best['cv_gap_f1']:.4f}, train-test gap: {best['holdout_gap_f1']:.4f})\n",
+        "## Independent holdout test performance",
         f"- Accuracy: {acc:.4f}",
         f"- F1 (weighted): {f1w:.4f}",
         f"- AUC-ROC (from Stage 3): {auc_val}\n",
@@ -170,8 +215,10 @@ def main():
         f"## Checkpoint Decision\n**{decision}**\n",
         "## Classification Report\n```",
         report, "```\n",
-        "## Top 5 candidates considered\n```",
-        df.head(5)[["vectorizer", "model", "accuracy", "f1_weighted", "roc_auc"]]
+        "## Top 5 candidates considered (by CV validation F1)\n```",
+        df.sort_values("cv_val_f1_mean", ascending=False)
+            .head(5)[["vectorizer", "model", "cv_val_f1_mean", "test_accuracy",
+                      "test_f1", "test_roc_auc", "overfitting_risk"]]
             .to_string(index=False),
         "```",
     ]

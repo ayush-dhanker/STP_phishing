@@ -1,6 +1,6 @@
 {
-  "checked_at": "2026-08-16T15:37:18+00:00",
-  "n_predictions": 35,
+  "checked_at": "2026-09-09T21:11:40+00:00",
+  "n_predictions": 184,
   "maintenance_needed": true,
   "breached_indicators": [
     "Input length drift (Jensen-Shannon)"

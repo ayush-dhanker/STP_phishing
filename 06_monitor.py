@@ -1,6 +1,16 @@
 # STAGE 6 (Utilization) — MONITOR SYSTEM
+# Modified to:
+#   1. Load the training reference distribution from Feast instead of
+#      feature_store/train_features.csv (which no longer exists).
+#   2. Push the computed indicators to a Prometheus Pushgateway, so Grafana
+#      can chart drift/phishing-rate/margin history over time, in addition
+#      to the existing Markdown report. This script is a short batch job —
+#      Prometheus can't scrape it directly, so Pushgateway is the bridge.
+#   Everything else (JS-distance drift math, root cause analysis,
+#   Markdown report) is unchanged.
 
 import os
+import sys
 import json
 from datetime import datetime, timezone
 
@@ -9,12 +19,22 @@ import pandas as pd
 from scipy.spatial.distance import jensenshannon
 from dotenv import load_dotenv
 
+from prometheus_client import CollectorRegistry, Gauge, push_to_gateway
+
+try:
+    from get_training_data_from_feast import load_split
+except ImportError:
+    load_split = None
+
 load_dotenv()
 
 LOG_FILE     = os.getenv("MONITOR_LOG_FILE", "monitoring/predictions.log")
-TRAIN_CSV    = "feature_store/train_features.csv"
+TRAIN_ENTITIES = "feature_repo/data/train_entities.parquet"
 STATUS_FILE  = "monitoring/monitor_status.json"
 REPORT_FILE  = "Monitoring_Report.md"
+
+PUSHGATEWAY_URL = os.getenv("PUSHGATEWAY_URL", "localhost:9091")
+PUSHGATEWAY_JOB = "phishing_monitor"
 
 # minimum number of predictions
 MIN_PREDICTIONS = int(os.getenv("MONITOR_MIN_PREDICTIONS", "30"))
@@ -22,7 +42,7 @@ MIN_PREDICTIONS = int(os.getenv("MONITOR_MIN_PREDICTIONS", "30"))
 # Jensen-Shannon distance above this means input distribution has shifted
 DRIFT_THRESHOLD = float(os.getenv("MONITOR_DRIFT_THRESHOLD", "0.20"))
 
-# predicted phishing rate 
+# predicted phishing rate
 PHISHING_RATE_DELTA = float(os.getenv("MONITOR_PHISHING_RATE_DELTA", "0.25"))
 
 # average decision score below this means model sits close to the boundary a lot
@@ -53,12 +73,19 @@ def load_predictions(path):
                 continue
     return pd.DataFrame(rows)
 
-def load_reference(path):
-    df = pd.read_csv(path)
+
+def load_reference():
+    """Reference distribution now comes from Feast, not feature_store/*.csv."""
+    if load_split is None:
+        sys.exit("ERROR: get_training_data_from_feast.py not importable. "
+                  "Make sure it's on the path.")
+    if not os.path.exists(TRAIN_ENTITIES):
+        sys.exit(f"ERROR: {TRAIN_ENTITIES} missing. Run pipeline_feast.py "
+                  f"and 'feast apply' first.")
+    df = load_split(TRAIN_ENTITIES)
     lengths = df["clean_text"].fillna("").str.len()
     phishing_rate = float(df["label"].mean())
     return lengths, phishing_rate
-
 
 
 # drift measure (Jensen-Shannon distance between two histograms)
@@ -87,7 +114,6 @@ def js_distance(reference_values, live_values, n_bins=10):
 
     distance = jensenshannon(ref_hist, live_hist, base=2)
     return float(distance) if not np.isnan(distance) else 0.0
-
 
 
 def run_checks(live, ref_lengths, ref_phishing_rate):
@@ -127,7 +153,7 @@ def run_checks(live, ref_lengths, ref_phishing_rate):
                     "A falling margin means the model is deciding closer to the line.",
         })
 
-    #computational monitoring- latency 
+    # computational monitoring - latency
     if "latency_ms" in live.columns and live["latency_ms"].notna().any():
         latencies = live["latency_ms"].dropna()
         p95 = float(np.percentile(latencies, 95))
@@ -138,7 +164,8 @@ def run_checks(live, ref_lengths, ref_phishing_rate):
             "threshold": LATENCY_THRESHOLD_MS,
             "breached": p95 > LATENCY_THRESHOLD_MS,
             "note": "Technical metric — an infrastructure concern, "
-                    "handled by Perform Infrastructure Management.",
+                    "handled by Perform Infrastructure Management. "
+                    "Also visible live in Grafana via phishing_request_latency_seconds.",
         })
     else:
         checks.append({
@@ -154,7 +181,42 @@ def run_checks(live, ref_lengths, ref_phishing_rate):
     return checks, maintenance_needed
 
 
-# DSPM "Perform Maintenance" 
+def push_metrics_to_gateway(checks, live, maintenance_needed):
+    """Push this cycle's indicators to the Pushgateway so Grafana can plot
+    them over time. Failure here (e.g. Pushgateway not running) should never
+    break the monitoring run — it's logged and skipped."""
+    registry = CollectorRegistry()
+
+    def find_value(keyword, default=np.nan):
+        for c in checks:
+            if keyword in c["name"] and isinstance(c["value"], (int, float)):
+                return float(c["value"])
+        return default
+
+    g_drift = Gauge("phishing_monitor_input_drift_js", "Latest JS-distance drift value", registry=registry)
+    g_drift.set(find_value("Input length drift", 0.0))
+
+    g_margin = Gauge("phishing_monitor_avg_decision_margin", "Latest average decision margin", registry=registry)
+    g_margin.set(find_value("decision margin", 0.0))
+
+    g_phishing_rate = Gauge("phishing_monitor_live_phishing_rate", "Live predicted phishing rate", registry=registry)
+    g_phishing_rate.set(float(live["label"].mean()) if "label" in live.columns else 0.0)
+
+    g_n = Gauge("phishing_monitor_n_predictions", "Predictions analysed this cycle", registry=registry)
+    g_n.set(len(live))
+
+    g_maint = Gauge("phishing_monitor_maintenance_needed", "1 if maintenance is needed, else 0", registry=registry)
+    g_maint.set(1 if maintenance_needed else 0)
+
+    try:
+        push_to_gateway(PUSHGATEWAY_URL, job=PUSHGATEWAY_JOB, registry=registry)
+        print(f"  Pushed metrics -> Pushgateway ({PUSHGATEWAY_URL})")
+    except Exception as e:
+        print(f"  WARNING: could not push metrics to Pushgateway ({PUSHGATEWAY_URL}): {e}")
+        print("  Report/status file were still written normally.")
+
+
+# DSPM "Perform Maintenance"
 def root_cause_section(checks, maintenance_needed):
     def find(keyword):
         for c in checks:
@@ -253,14 +315,15 @@ def root_cause_section(checks, maintenance_needed):
     return lines
 
 
-# reprt
+# report
 def write_report(live, checks, maintenance_needed, ref_phishing_rate):
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
 
     lines = [
         "# Monitoring Report — Phishing Email Detection\n",
         "*Stage 6 (Utilization) artifact — output of the **Monitor System** "
-        "activity, produced by `06_monitor.py`.*\n",
+        "activity, produced by `06_monitor.py`. Indicators are also pushed "
+        "to a Prometheus Pushgateway for live charting in Grafana.*\n",
         f"- Generated: {now}",
         f"- Predictions analysed: {len(live):,}",
         f"- Log file: `{LOG_FILE}`\n",
@@ -304,11 +367,11 @@ def write_report(live, checks, maintenance_needed, ref_phishing_rate):
 
     lines.append("## Reference used\n")
     lines.append(
-        f"Training distribution from `{TRAIN_CSV}` "
-        f"(phishing rate {ref_phishing_rate:.3f}). Note that the training "
-        "reference measures parsed `clean_text` while the live log measures "
-        "the raw text submitted to the API; a small baseline difference is "
-        "expected and is not by itself evidence of drift.\n"
+        f"Training distribution loaded from Feast (`{TRAIN_ENTITIES}` "
+        f"joined against the feature view) — phishing rate {ref_phishing_rate:.3f}. "
+        "Note that the training reference measures parsed `clean_text` while "
+        "the live log measures the raw text submitted to the API; a small "
+        "baseline difference is expected and is not by itself evidence of drift.\n"
     )
 
     with open(REPORT_FILE, "w") as f:
@@ -333,11 +396,7 @@ def main():
               f"of {MIN_PREDICTIONS} needed for a reliable reading.")
         print("Report will still be written, but treat the numbers as indicative.")
 
-    if not os.path.exists(TRAIN_CSV):
-        print(f"ERROR: {TRAIN_CSV} missing. Run 02_data_pipeline.py first.")
-        return
-
-    ref_lengths, ref_phishing_rate = load_reference(TRAIN_CSV)
+    ref_lengths, ref_phishing_rate = load_reference()
     checks, maintenance_needed = run_checks(live, ref_lengths, ref_phishing_rate)
 
     print("\nIndicators:")
@@ -348,6 +407,7 @@ def main():
     print(f"\nMaintenance needed: {maintenance_needed}")
 
     write_report(live, checks, maintenance_needed, ref_phishing_rate)
+    push_metrics_to_gateway(checks, live, maintenance_needed)
 
     # status file — ct_retrain.py reads this
     status = {

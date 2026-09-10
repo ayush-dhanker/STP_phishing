@@ -1,0 +1,15 @@
+global:
+  scrape_interval: 15s
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Live ops metrics scraped directly from the FastAPI app's /metrics endpoint
+  - job_name: "phishing-api"
+    static_configs:
+      - targets: ["api:8000"]
+
+  # Batch-job indicators pushed by 06_monitor.py (drift, phishing rate, margin)
+  - job_name: "phishing-monitor"
+    honor_labels: true
+    static_configs:
+      - targets: ["pushgateway:9091"]

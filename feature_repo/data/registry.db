@@ -1,0 +1,77 @@
+
+ƒ
+e
+email_id;Unique identifier for a single email (train_<i> / test_<i>)"email_idJphishing_detection
+«·…Õ¸Ñ—a«·…Õ¸Ñ—a
+G
+)
+__dummy"
+__dummy_idJphishing_detection
+«·…Õ¸Ñ—a«·…Õ¸Ñ—a1"$836e2aec-6f03-4e79-80e1-d276110b339b*„œ‡Õ€Ÿý¹2ß
+¥
+email_featuresphishing_detectionemail_id"
+body_len"
+subject_len"
+
+word_count"
+char_per_word"
+digit_ratio"
+special_ratio"
+uppercase_ratio"
+num_url"
+has_url"
+is_free_email"
+subj_exclamation"
+subj_question"
+subj_urgent"
+
+subj_money"
+body_urgent"
+num_recipients"
+	send_hour"
+send_dow"
+
+is_weekend"
+date_parse_failed"
+
+clean_text2€†°–:ievent_timestampZdata/email_features.parquet¢email_features_source’„œ‡ÕÈŠ©«"„œ‡ÕÈŠ©«@b
+email_id’latest5
+«·…Õ¸Ñ—a„œ‡Õ€Ÿý¹
+È³Õ¾€àœã€Ã‚Õ0RÉ
+Æ
+,feast.infra.online_stores.sqlite.SqliteTable"•
+pD:\OVGU\Digital Engineering\PhishingEmailClassification\new_files\STP_phishing\feature_repo\data\online_store.db!phishing_detection_email_featuresb°event_timestampZdata/email_features.parquetŠ1feast.infra.offline_stores.file_source.FileSource¢email_features_sourceªphishing_detection’«·…ÕÈœü@"«·…Õ¸Ñ—aŠ2
+
+phishing_detection
+«·…Õ¸‘¹A«·…Õ¸‘¹A’â
+ß
+email_featuresphishing_detection"feature_view*÷
+Ø
+email_featuresphishing_detectionemail_id"
+body_len"
+subject_len"
+
+word_count"
+char_per_word"
+digit_ratio"
+special_ratio"
+uppercase_ratio"
+num_url"
+has_url"
+is_free_email"
+subj_exclamation"
+subj_question"
+subj_urgent"
+
+subj_money"
+body_urgent"
+num_recipients"
+	send_hour"
+send_dow"
+
+is_weekend"
+date_parse_failed"
+
+clean_text2€†°–:›event_timestampZdata/email_features.parquetŠ1feast.infra.offline_stores.file_source.FileSource¢email_features_source’«·…ÕÈœü@"«·…Õ¸Ñ—a@b
+email_id’latest
+«·…Õ¸Ñ—a«·…Õ¸Ñ—a2«·…Õ€â×cB$428959b0-1ba7-4965-89ba-72d0e7bd6f9b

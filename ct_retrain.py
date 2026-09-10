@@ -1,4 +1,9 @@
 # STAGE 6 (Utilization) — PERFORM MAINTENANCE / CT COMPONENT
+# Updated PIPELINE: the old 02_data_pipeline.py / 03_train.py were replaced
+# by pipeline_feast.py / 03_train_kfold.py; 04_evaluate.py is unchanged.
+# Also runs `feast apply` between the feature pipeline and training, since
+# new/changed feature definitions need to be (re-)registered before Feast
+# will serve them.
 
 import os
 import sys
@@ -10,8 +15,7 @@ from datetime import datetime, timezone
 STATUS_FILE = "monitoring/monitor_status.json"
 LOG_FILE    = "CT_Trigger_Log.md"
 
-PIPELINE = ["02_data_pipeline.py", "03_train.py", "04_evaluate.py"]
-
+PIPELINE = ["pipeline_feast.py", "03_train_kfold.py", "04_evaluate.py"]
 
 
 def read_monitor_status():
@@ -37,7 +41,22 @@ def decide(force_reason):
     return False, "Monitor reports all indicators within thresholds."
 
 
+def run_feast_apply():
+    print(f"\n{'=' * 60}")
+    print("Running: feast apply (feature_repo/)")
+    print("=" * 60)
+    result = subprocess.run(["feast", "apply"], cwd="feature_repo")
+    if result.returncode != 0:
+        return False, "feast apply failed"
+    return True, "feast apply succeeded"
+
+
 def run_pipeline():
+    ok, detail = run_feast_apply()
+    if not ok:
+        print("\nERROR: feast apply failed. Retraining stopped.")
+        return False, detail
+
     for script in PIPELINE:
         if not os.path.exists(script):
             print(f"ERROR: {script} not found.")
@@ -97,7 +116,7 @@ def main():
         return
 
     if args.dry_run:
-        print("\n[dry run] Would run: " + " -> ".join(PIPELINE))
+        print("\n[dry run] Would run: feast apply -> " + " -> ".join(PIPELINE))
         log_trigger(reason, "dry-run", "Decision only, pipeline not executed")
         return
 
@@ -105,7 +124,7 @@ def main():
 
     if ok:
         print("\nRetraining complete.")
-        print("04_evaluate.py registered a new model version and moved the")
+        print("04_evaluate_kfold.py registered a new model version and moved the")
         print("'production' alias only if the checkpoint criteria passed.")
         print("Restart 05_deploy.py so the Serving Component picks it up.")
         log_trigger(reason, "completed", detail)

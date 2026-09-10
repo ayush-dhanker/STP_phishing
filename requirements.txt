@@ -1,12 +1,33 @@
+# Core pipeline
 pandas
 numpy
 scipy
 scikit-learn
-mlflow
-matplotlib
+pyarrow
+
+# Feature store
+feast
+
+# Experiment tracking
+# IMPORTANT: pin this to the EXACT version installed on your host machine
+# (check with `pip show mlflow`). The container and your local Python both
+# read/write the same mounted mlflow.db — if their MLflow versions differ,
+# whichever one touches the file first stamps it with an incompatible
+# schema version for the other.
+mlflow==3.10.1
+
+# Serving
 fastapi
-uvicorn
+uvicorn[standard]
+pydantic
 python-dotenv
+
+# Monitoring
+prometheus-client
+
+# Utilization / smoke-test client
 requests
+
+# Testing
 pytest
 httpx

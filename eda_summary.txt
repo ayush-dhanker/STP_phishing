@@ -1,4 +1,4 @@
-EDA SUMMARY â€” Phishing Email Detection
+EDA SUMMARY — Phishing Email Detection
 ======================================
 
 Dataset

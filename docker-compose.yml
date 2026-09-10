@@ -1,0 +1,57 @@
+services:
+  api:
+    build: .
+    container_name: phishing_api
+    ports:
+      - "8000:8000"
+    environment:
+      MLFLOW_TRACKING_URI: sqlite:///mlflow.db
+      MLFLOW_REGISTRY_MODEL_NAME: phishing_detector_prod
+      MONITOR_LOG_FILE: monitoring/predictions.log
+    volumes:
+      - ./monitoring:/app/monitoring
+      - ./mlflow.db:/app/mlflow.db
+      - ./best_model.pkl:/app/best_model.pkl
+      - ./mlruns:/app/mlruns
+    restart: unless-stopped
+
+  pushgateway:
+    image: prom/pushgateway:latest
+    container_name: phishing_pushgateway
+    ports:
+      - "9091:9091"
+    restart: unless-stopped
+
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: phishing_prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    depends_on:
+      - api
+      - pushgateway
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:latest
+    container_name: phishing_grafana
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+    volumes:
+      - ./grafana/provisioning:/etc/grafana/provisioning
+      - ./grafana/dashboards:/var/lib/grafana/dashboards
+      - grafana_data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+
+volumes:
+  prometheus_data:
+  grafana_data:

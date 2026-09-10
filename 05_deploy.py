@@ -1,4 +1,14 @@
-# STAGE 5 (Deployment) 
+# STAGE 5 (Deployment)
+# Modified to expose Prometheus metrics at /metrics.
+#
+# Division of concerns:
+#   - Prometheus/Grafana: real-time OPS monitoring — request rate, latency,
+#     error rate, prediction counts, confidence distribution. Scraped live
+#     from this process.
+#   - The JSON prediction log (unchanged) still feeds 06_monitor.py's
+#     Jensen-Shannon drift analysis, which needs the raw per-request values
+#     replayed against the training reference — not something a handful of
+#     Prometheus histogram buckets can reconstruct precisely.
 
 import os
 import json
@@ -7,11 +17,13 @@ import pickle
 from datetime import datetime, timezone
 
 from dotenv import load_dotenv
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from pydantic import BaseModel
 
 import mlflow
 import mlflow.sklearn
+
+from prometheus_client import Counter, Histogram, generate_latest, CONTENT_TYPE_LATEST
 
 load_dotenv()
 
@@ -22,7 +34,34 @@ FALLBACK_PKL  = "best_model.pkl"
 LOG_FILE = os.getenv("MONITOR_LOG_FILE", "monitoring/predictions.log")
 os.makedirs(os.path.dirname(LOG_FILE), exist_ok=True)
 
-#Loading the model
+
+# ============================================================
+# Prometheus metrics
+# ============================================================
+PREDICTIONS_TOTAL = Counter(
+    "phishing_predictions_total", "Total predictions served", ["prediction"]
+)
+PREDICTION_ERRORS_TOTAL = Counter(
+    "phishing_prediction_errors_total", "Prediction request errors", ["error_type"]
+)
+REQUEST_LATENCY_SECONDS = Histogram(
+    "phishing_request_latency_seconds", "Request latency in seconds", ["endpoint"]
+)
+INPUT_TEXT_LENGTH = Histogram(
+    "phishing_input_text_length_chars", "Length of submitted email text (chars)",
+    buckets=(50, 100, 200, 500, 1000, 2000, 5000, 10000),
+)
+PREDICTION_CONFIDENCE = Histogram(
+    "phishing_prediction_confidence", "predict_proba confidence when available",
+    buckets=(0.5, 0.6, 0.7, 0.8, 0.9, 0.95, 0.99, 1.0),
+)
+DECISION_MARGIN = Histogram(
+    "phishing_decision_margin", "decision_function margin when available",
+    buckets=(0.0, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0),
+)
+
+
+# Loading the model
 def load_model():
     """Try the MLflow Model Registry first (the DSPM way).
     If that fails, fall back to the local pickle file."""
@@ -40,12 +79,12 @@ def load_model():
             print(f"Loaded fallback model: {FALLBACK_PKL}")
             return model, f"pickle:{FALLBACK_PKL}"
         raise RuntimeError(
-            "No model found. Run 02 -> 03 -> 04 first to train and register one."
+            "No model found. Run pipeline_feast.py -> 03_train_kfold.py -> "
+            "04_evaluate_kfold.py first to train and register one."
         )
 
 
 model, model_source = load_model()
-
 
 
 app = FastAPI(
@@ -62,11 +101,11 @@ class EmailInput(BaseModel):
 
 class PredictionOutput(BaseModel):
     """What we send back."""
-    prediction: str            
-    label: int                
-    confidence: float | None   
-    decision_score: float | None  
-    confidence_type: str      
+    prediction: str
+    label: int
+    confidence: float | None
+    decision_score: float | None
+    confidence_type: str
     model_source: str
 
 
@@ -76,16 +115,24 @@ def health_check():
     return {"status": "ok", "model_source": model_source}
 
 
+@app.get("/metrics")
+def metrics():
+    """Prometheus scrapes this endpoint."""
+    return Response(generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
 @app.post("/predict", response_model=PredictionOutput)
 def predict(email: EmailInput):
- 
+
     start_time = time.perf_counter()
 
     text = email.text.strip()
     if not text:
+        PREDICTION_ERRORS_TOTAL.labels(error_type="empty_text").inc()
         raise HTTPException(status_code=400, detail="Email text is empty.")
 
-   
+    INPUT_TEXT_LENGTH.observe(len(text))
+
     label = int(model.predict([text])[0])
 
     confidence = None
@@ -96,9 +143,11 @@ def predict(email: EmailInput):
         probabilities = model.predict_proba([text])[0]
         confidence = float(max(probabilities))
         confidence_type = "probability"
+        PREDICTION_CONFIDENCE.observe(confidence)
     elif hasattr(model, "decision_function"):
         decision_score = float(abs(model.decision_function([text])[0]))
         confidence_type = "decision_margin"
+        DECISION_MARGIN.observe(decision_score)
 
     result = {
         "prediction": "phishing email" if label == 1 else "safe email",
@@ -111,11 +160,14 @@ def predict(email: EmailInput):
 
     latency_ms = (time.perf_counter() - start_time) * 1000
 
+    PREDICTIONS_TOTAL.labels(prediction=result["prediction"]).inc()
+    REQUEST_LATENCY_SECONDS.labels(endpoint="predict").observe(latency_ms / 1000)
+
     log_prediction(text, result, latency_ms)
     return result
 
 
-# prediction log
+# prediction log — unchanged, still feeds 06_monitor.py's drift analysis
 def log_prediction(text, result, latency_ms=None):
     """Append one line of JSON per prediction.
     Stage 6 (06_monitor.py) reads this file to watch the live system.
@@ -131,7 +183,6 @@ def log_prediction(text, result, latency_ms=None):
     }
     with open(LOG_FILE, "a") as f:
         f.write(json.dumps(entry) + "\n")
-
 
 
 if __name__ == "__main__":

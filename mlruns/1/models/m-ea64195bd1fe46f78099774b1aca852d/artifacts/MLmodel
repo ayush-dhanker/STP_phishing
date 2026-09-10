@@ -1,0 +1,29 @@
+artifact_path: file:///D:/OVGU/Digital Engineering/PhishingEmailClassification/new_files/STP_phishing/mlruns/1/models/m-ea64195bd1fe46f78099774b1aca852d/artifacts
+flavors:
+  python_function:
+    env:
+      conda: conda.yaml
+      virtualenv: python_env.yaml
+    loader_module: mlflow.sklearn
+    model_path: model.pkl
+    predict_fn: predict
+    python_version: 3.10.11
+  sklearn:
+    code: null
+    pickled_model: model.pkl
+    serialization_format: cloudpickle
+    sklearn_version: 1.7.2
+    skops_trusted_types: null
+is_signature_from_type_hint: false
+mlflow_version: 3.10.1
+model_id: m-ea64195bd1fe46f78099774b1aca852d
+model_size_bytes: 23493198
+model_uuid: m-ea64195bd1fe46f78099774b1aca852d
+prompts: null
+run_id: 42a7d3a443d644428f3e333d6584e3ff
+signature:
+  inputs: '[{"type": "string", "name": "clean_text", "required": true}]'
+  outputs: '[{"type": "tensor", "tensor-spec": {"dtype": "int64", "shape": [-1]}}]'
+  params: null
+type_hint_from_example: false
+utc_time_created: '2026-09-09 15:12:30.825045'
