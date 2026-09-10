@@ -1,9 +1,3 @@
-"""
-Replaces: pd.read_csv(feature_store/train_features.csv)
-
-This is what 03_train.py should do now — ask Feast for the point-in-time
-correct features joined against your entity+label files.
-"""
 
 import pandas as pd
 from feast import FeatureStore

@@ -1,9 +1,4 @@
 # STAGE 6 (Utilization) — PERFORM MAINTENANCE / CT COMPONENT
-# Updated PIPELINE: the old 02_data_pipeline.py / 03_train.py were replaced
-# by pipeline_feast.py / 03_train_kfold.py; 04_evaluate.py is unchanged.
-# Also runs `feast apply` between the feature pipeline and training, since
-# new/changed feature definitions need to be (re-)registered before Feast
-# will serve them.
 
 import os
 import sys
@@ -124,7 +119,7 @@ def main():
 
     if ok:
         print("\nRetraining complete.")
-        print("04_evaluate_kfold.py registered a new model version and moved the")
+        print("04_evaluate.py registered a new model version and moved the")
         print("'production' alias only if the checkpoint criteria passed.")
         print("Restart 05_deploy.py so the Serving Component picks it up.")
         log_trigger(reason, "completed", detail)

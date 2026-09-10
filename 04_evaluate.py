@@ -1,18 +1,4 @@
 # STAGE 4 (Evaluation) — MODEL SELECTION & CHECKPOINT DECISION
-# Modified to:
-#   1. Read experiment_results.csv in its new (k-fold) shape:
-#        cv_val_f1_mean / test_f1 / test_accuracy / test_roc_auc /
-#        holdout_gap_f1 / cv_gap_f1 / overfitting_risk
-#      instead of the old single f1_weighted / accuracy / roc_auc columns.
-#   2. Select the "best" model by CV VALIDATION score (cv_val_f1_mean),
-#      not by test-set score — the old script picked the model that scored
-#      highest on the test set, then checked that same test-set score
-#      against the pass/fail thresholds below. That's circular: you're
-#      using the test set both to choose the winner and to grade it.
-#      Selecting on CV instead means the test-set threshold check is a
-#      genuinely independent confirmation.
-#   3. Prefer candidates NOT flagged overfitting_risk when picking the winner.
-#   4. Load train/test from Feast instead of feature_store/*.csv.
 
 import os
 import sys

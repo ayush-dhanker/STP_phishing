@@ -1,13 +1,4 @@
 # STAGE 6 (Utilization) — MONITOR SYSTEM
-# Modified to:
-#   1. Load the training reference distribution from Feast instead of
-#      feature_store/train_features.csv (which no longer exists).
-#   2. Push the computed indicators to a Prometheus Pushgateway, so Grafana
-#      can chart drift/phishing-rate/margin history over time, in addition
-#      to the existing Markdown report. This script is a short batch job —
-#      Prometheus can't scrape it directly, so Pushgateway is the bridge.
-#   Everything else (JS-distance drift math, root cause analysis,
-#   Markdown report) is unchanged.
 
 import os
 import sys

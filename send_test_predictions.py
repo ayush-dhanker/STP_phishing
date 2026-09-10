@@ -1,9 +1,4 @@
 # STAGE 6 (Utilization)
-# Modified: each sample email now carries its known true label, so this
-# script can tell you whether the live API got it right — not just what
-# it predicted. This is separate from Stage 4's real accuracy numbers
-# (Evaluation_Report.md), which are measured on thousands of held-out
-# emails, not these 30 illustrative examples.
 
 import argparse
 import time

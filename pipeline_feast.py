@@ -1,20 +1,4 @@
 # STAGE 2 (Data Collection, Exploration, and Preparation) — DATA PIPELINE
-# Modified to feed a Feast feature store instead of local CSV files.
-#
-# Key differences from the original script:
-#   1. Every row gets an `email_id` (entity key) and `event_timestamp` — Feast
-#      requires both on every feature source.
-#   2. Train and test are concatenated into ONE feature table
-#      (feature_repo/data/email_features.parquet). Feast stores feature
-#      values keyed by entity+time; it doesn't have a notion of "train file"
-#      vs "test file".
-#   3. The train/test split lives in two small "entity + label" files
-#      (train_entities.parquet, test_entities.parquet) containing just
-#      email_id, event_timestamp, label, email_type. These are what you hand
-#      to Feast's get_historical_features() to pull back a point-in-time
-#      correct training/test set.
-#   4. Everything is written as parquet, not CSV — Feast's FileSource needs a
-#      typed timestamp column, which CSV round-trips badly.
 
 import os
 import re

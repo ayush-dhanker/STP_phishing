@@ -1,5 +1,4 @@
 # STAGE 5 (Deployment) — DEPLOYMENT TEST
-# Added: a check that /metrics is exposed correctly for Prometheus.
 
 import importlib
 

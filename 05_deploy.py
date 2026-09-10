@@ -1,14 +1,4 @@
 # STAGE 5 (Deployment)
-# Modified to expose Prometheus metrics at /metrics.
-#
-# Division of concerns:
-#   - Prometheus/Grafana: real-time OPS monitoring — request rate, latency,
-#     error rate, prediction counts, confidence distribution. Scraped live
-#     from this process.
-#   - The JSON prediction log (unchanged) still feeds 06_monitor.py's
-#     Jensen-Shannon drift analysis, which needs the raw per-request values
-#     replayed against the training reference — not something a handful of
-#     Prometheus histogram buckets can reconstruct precisely.
 
 import os
 import json

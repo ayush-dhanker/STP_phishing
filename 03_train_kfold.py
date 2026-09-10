@@ -1,12 +1,4 @@
 # STAGE 3 (Modeling / Analysis) — EXPERIMENT TRACKING
-# Modified to:
-#   1. Load features from Feast instead of feature_store/*.csv
-#   2. Use Stratified K-Fold CV on the training set for a robust performance
-#      estimate (instead of a single train/test fit)
-#   3. Explicitly check for overfitting two ways:
-#        a) CV train-fold score vs CV validation-fold score, per combo
-#        b) Final resubstitution (train) score vs true holdout (test) score
-#      Both gaps are logged to MLflow and flagged if they exceed a threshold.
 
 import os
 import sys
