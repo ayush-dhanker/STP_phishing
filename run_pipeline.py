@@ -26,5 +26,5 @@ if __name__ == "__main__":
     run("pipeline_feast.py")
     run_feast_apply()
     run("03_train_kfold.py")
-    run("04_evaluate_kfold.py")
+    run("04_evaluate.py")
     print("\nPipeline complete.")

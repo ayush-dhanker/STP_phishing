@@ -70,7 +70,7 @@ def load_model():
             return model, f"pickle:{FALLBACK_PKL}"
         raise RuntimeError(
             "No model found. Run pipeline_feast.py -> 03_train_kfold.py -> "
-            "04_evaluate_kfold.py first to train and register one."
+            "04_evaluate.py first to train and register one."
         )
 
 
