@@ -482,44 +482,6 @@ These are outputs, not source. Each is rewritten when its script runs.
 
 ---
 
-## Limitations and known issues
-
-**The test split is heavily skewed.** Training is an even 50.1 percent phishing,
-while the test split is 90.9 percent safe. That asymmetry is why phishing precision
-sits at 0.968 against a recall of 1.000: with only 336 phishing emails among 3,699,
-a handful of false positives moves precision noticeably while barely touching
-accuracy. The headline accuracy figure should be read with that in mind, and the
-per-class report in `Evaluation_Report.md` is the more informative view.
-
-**The drift indicator has a baseline mismatch.** The reference distribution is the
-length of parsed `clean_text`, while the live log records the length of the raw text
-submitted to the API. Part of the persistent drift breach recorded in
-`monitoring/monitor_status.json` is that mismatch rather than genuine shift.
-`06_monitor.py` notes this in its own report. Aligning the two would mean either
-measuring raw length on the reference side or parsing incoming requests the same way
-the pipeline does.
-
-**Experiment artifacts are committed to git.** `mlruns/` is roughly 1,700 tracked
-files and about two gigabytes, which has taken `.git` to 311 MB, and `mlflow.db.bak`
-is committed alongside it. Cloning is slow as a result. The fix is to ignore the
-directory and point the tracking store at storage outside the repository, keeping
-only the reports and the selected model under version control.
-
-**The default data path is case sensitive.** `pipeline_feast.py` defaults `DATA_DIR`
-to `data` while the committed directory is `Data`. Windows resolves this
-transparently. The Linux container built from the Dockerfile does not. Set
-`DATA_DIR=Data` when running on a case-sensitive filesystem.
-
-**Exploration paths are hardcoded.** `01_eda.py` reads `data/...` directly rather
-than honouring `DATA_DIR`, so the override above does not reach it.
-
-**No online feature serving.** The Feast online store is configured but never
-materialized, since the batch workflow retrieves everything through the offline
-store. Low-latency online lookups would need `feast materialize-incremental` added to
-the pipeline.
-
----
-
 ## Tech stack
 
 Python 3.10 · scikit-learn · Feast · MLflow · FastAPI · Prometheus · Grafana ·
